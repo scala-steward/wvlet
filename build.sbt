@@ -65,7 +65,7 @@ lazy val wvlet =
     publishArtifact := false,
     publish := {},
     publishLocal := {}
-  ).aggregate(wvletCore, wvletTest)
+  ).aggregate(wvletCore, wvletPresto, wvletTest)
 
 val wvletLog = "org.wvlet" %% "wvlet-log" % "1.1"
 
@@ -91,3 +91,15 @@ lazy val wvletTest =
       "org.scalacheck" %% "scalacheck" % "1.12.6"
     )
   )
+
+lazy val wvletPresto =
+  Project(id = "wvlet-presto", base = file("wvlet-presto")).settings(
+    buildSettings,
+    description := "wvlet presto plugin",
+    libraryDependencies ++= Seq(
+      wvletLog,
+      "org.wvlet" %% "object-schema" % "1.0",
+      "com.facebook.presto" % "presto-parser" % "0.156",
+      "org.antlr" % "antlr4" % "4.5.1"
+    )
+  ).dependsOn(wvletTest % "test->compile")
