@@ -29,7 +29,7 @@ class ModelClassGeneratorTest extends WvletSpec {
     "find root constructors" in {
       val nodeClasses = ModelClassGenerator.findNodeClasses
       nodeClasses.foreach { n =>
-        val c = ModelClassGenerator.findRootConstructor(n)
+        val c = n.findRootConstructor
         info(c)
       }
     }

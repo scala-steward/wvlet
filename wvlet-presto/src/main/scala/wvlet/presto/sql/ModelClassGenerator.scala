@@ -26,10 +26,53 @@ import wvlet.obj.{GenericType, ObjectType}
   */
 object ModelClassGenerator extends LogSupport {
 
-  case class ModelClass(cl:Class[_]) {
+  case class RootConstructor(constructor: Constructor[_], param:Seq[ModelParam])
+  case class ModelParam(name:String, valueType:ObjectType)
+
+  case class ModelClass(cl:Class[_]) extends LogSupport {
     override def toString = s"${if(isAbstract) "abstract " else ""}${name}"
     def name = cl.getSimpleName
     def isAbstract = Modifier.isAbstract(cl.getModifiers)
+
+    lazy val fields : Seq[wvlet.obj.ConstructorParameter] = {
+      val params =
+        for((f, i) <- cl.getDeclaredFields.zipWithIndex
+            if Modifier.isFinal(f.getModifiers)) yield {
+          wvlet.obj.ConstructorParameter(cl, None, i, f.getName, resolveTypeOf(f.getGenericType))
+        }
+      params.toSeq
+    }
+
+    lazy val getterParameters : Seq[ModelParam] = {
+      val getterMethods =
+        cl.getDeclaredMethods()
+        .filter { m =>
+          val name = m.getName
+          name.startsWith("get") || name.startsWith("is")
+        }
+
+      getterMethods.map { m =>
+        val name = m.getName.replaceFirst("^(is|get)", "")
+        val paramName = s"${name.charAt(0).toLower}${name.substring(1)}"
+        val returnType = resolveTypeOf(m.getGenericReturnType)
+        ModelParam(paramName, returnType)
+      }
+    }
+
+    def findRootConstructor: Option[RootConstructor] = {
+      info(s"${name}\n - ${fields.mkString("\n - ")}")
+      cl.getDeclaredConstructors
+      .find(isRootModelClassConstructor)
+      .map{ c =>
+        val params = c.getParameters
+        val modelParams = params.map { p =>
+          val tpe = resolveParameter(p)
+          ModelParam("", tpe)
+        }
+        RootConstructor(c, modelParams)
+      }
+    }
+
   }
 
   private[sql] def findNodeClasses : Seq[ModelClass] = {
@@ -64,8 +107,6 @@ object ModelClassGenerator extends LogSupport {
     b.result
   }
 
-  case class RootConstructor(constructor: Constructor[_], param:Seq[ModelParam])
-  case class ModelParam(name:String, valueType:ObjectType)
 
   private[sql] def isJavaOptional(cl:Class[_]) = cl == classOf[Optional[_]]
   private[sql] def isJavaList(cl:Class[_]) = cl == classOf[java.util.List[_]]
@@ -89,12 +130,6 @@ object ModelClassGenerator extends LogSupport {
     }
   }
 
-  private[sql] def findModelClassField(cl:Class[_]) : Seq[wvlet.obj.ConstructorParameter] = {
-    for((f, i) <- cl.getDeclaredFields.zipWithIndex if Modifier.isFinal(f.getModifiers)) yield {
-      wvlet.obj.ConstructorParameter(cl, None, i, f.getName, resolveTypeOf(f.getGenericType))
-    }
-  }
-
   private[sql] def isRootModelClassConstructor(c:Constructor[_]) = {
     val params = c.getParameters
     if (params.length <= 0) {
@@ -110,21 +145,6 @@ object ModelClassGenerator extends LogSupport {
           args.length > 0 && args(0).getTypeName == "com.facebook.presto.sql.tree.NodeLocation"
         }
       }
-    }
-  }
-
-  def findRootConstructor(m:ModelClass) : Option[RootConstructor] = {
-    val fields = findModelClassField(m.cl)
-    info(s"${m.name}\n - ${fields.mkString("\n - ")}")
-    m.cl.getDeclaredConstructors
-    .find(isRootModelClassConstructor)
-    .map{ c =>
-      val params = c.getParameters
-      val modelParams = params.map { p =>
-        val tpe = resolveParameter(p)
-        ModelParam("", tpe)
-      }
-      RootConstructor(c, modelParams)
     }
   }
 
